@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Optokinetic Drum Simulator</title>
+  <style>
+    :root {
+      /* Default values - will be overridden by user input */
+      --stripe-width: 240px;
+      --speed: 0.5s;
+      --orientation: 90deg;
+    }
+
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #000;
+      color: #fff;
+      font-family: system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ===== MENU ===== */
+    #menu {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.25rem;
+      text-align: center;
+      animation: fadeIn 0.4s ease-out;
+      max-width: 500px;
+      padding: 20px;
+    }
+    h1 {
+      font-size: 2rem;
+      margin: 0;
+    }
+    button {
+      padding: 0.9rem 2.2rem;
+      font-size: 1.15rem;
+      border: none;
+      border-radius: 0.6rem;
+      cursor: pointer;
+      background: #fff;
+      color: #000;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(0, 0, 0, 0.25);
+    }
+
+    /* Settings controls */
+    .settings-group {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      width: 100%;
+      margin: 1rem 0;
+      padding: 1rem;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+    }
+    .control-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    label {
+      font-size: 0.9rem;
+    }
+    input[type="range"] {
+      width: 150px;
+    }
+    input[type="number"] {
+      width: 60px;
+      padding: 5px;
+      border-radius: 4px;
+      border: none;
+    }
+
+    /* ===== DRUM VIEW ===== */
+    .drum-view {
+      position: fixed;
+      inset: 0;
+      animation: scrollX var(--speed) linear infinite;
+      background: repeating-linear-gradient(
+        var(--orientation),
+        #ffffff 0 var(--stripe-width),
+        #000000 var(--stripe-width) calc(var(--stripe-width) * 2)
+      );
+      background-size: calc(var(--stripe-width) * 2) calc(var(--stripe-width) * 2); /* Add this line */
+    }
+
+    /* Webcam preview */
+    #webcam-preview {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 160px;
+      height: 120px;
+      border: 2px solid white;
+      border-radius: 8px;
+      display: none;
+    }
+
+    /* Recording indicator */
+    #recording-indicator {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      background: red;
+      color: white;
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-weight: bold;
+      display: none;
+      z-index: 1000;
+    }
+
+    /* Permission status */
+    #permission-status {
+      margin-top: 1rem;
+      padding: 0.5rem;
+      border-radius: 4px;
+      font-size: 0.9rem;
+    }
+    .permission-granted {
+      background: rgba(0, 255, 0, 0.2);
+      color: #0f0;
+    }
+    .permission-denied {
+      background: rgba(255, 0, 0, 0.2);
+      color: #f00;
+    }
+
+    /* Keyframes */
+    @keyframes scrollX {
+      from {
+        background-position-x: 0;
+      }
+      to {
+        background-position-x: calc(var(--stripe-width) * 2);
+      }
+    }
+    @keyframes scrollXReverse {
+      from {
+        background-position-x: calc(var(--stripe-width) * 2);
+      }
+      to {
+        background-position-x: 0;
+      }
+    }
+    @keyframes scrollY {
+      from {
+        background-position-y: 0;
+      }
+      to {
+        background-position-y: calc(var(--stripe-width) * 2);
+      }
+    }
+    @keyframes scrollYReverse {
+      from {
+        background-position-y: calc(var(--stripe-width) * 2);
+      }
+      to {
+        background-position-y: 0;
+      }
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+      }
+    }
+  </style>
+</head>
+  <body>
+    <!-- [Previous HTML content remains exactly the same] -->
+
+    <div id="menu">
+      <h1>Optokinetic Drum Simulator</h1>
+      <p>Select the direction of motion</p>
+
+      <div class="settings-group">
+        <div class="control-row">
+          <label for="stripe-width">Stripe Width:</label>
+          <input type="range" id="stripe-width" min="50" max="500" value="240" step="10">
+          <input type="number" id="stripe-width-value" min="50" max="500" value="240">
+          <span>px</span>
+        </div>
+        <div class="control-row">
+          <label for="speed">Speed:</label>
+          <input type="range" id="speed" min="0.1" max="2" value="0.5" step="0.1">
+          <input type="number" id="speed-value" min="0.1" max="2" value="0.5" step="0.1">
+          <span>seconds</span>
+        </div>
+      </div>
+
+      <button data-direction="left">Right → Left</button>
+      <button data-direction="right">Left → Right</button>
+      <button data-direction="up">Down → Up</button>
+      <button data-direction="down">Up → Down</button>
+
+      <div id="permission-status">
+        <p>Webcam permissions: Not checked</p>
+      </div>
+
+      <div id='grantAndRevoke'>
+        <button id="check-permissions">Check Permissions</button>
+        <button id="revoke-permissions" style="display: none;">Revoke Permissions</button>
+      </div>
+    </div>
+
+    <!-- Webcam preview -->
+    <video id="webcam-preview" autoplay muted playsinline></video>
+
+    <!-- Recording indicator -->
+    <div id="recording-indicator">RECORDING</div>
+
+    <script>
+      const menu = document.getElementById("menu");
+      const webcamPreview = document.getElementById("webcam-preview");
+      const recordingIndicator = document.getElementById("recording-indicator");
+      const permissionStatus = document.getElementById("permission-status");
+      const checkPermissionsBtn = document.getElementById("check-permissions");
+      const revokePermissionsBtn = document.getElementById("revoke-permissions");
+
+      // Settings controls
+      const stripeWidthInput = document.getElementById("stripe-width");
+      const stripeWidthValue = document.getElementById("stripe-width-value");
+      const speedInput = document.getElementById("speed");
+      const speedValue = document.getElementById("speed-value");
+
+      // Variables for media streams and recording
+      let mediaStream = null;
+      let mediaRecorder = null;
+      let recordedChunks = [];
+      let currentDirection = "";
+      let recordingStartTime = null;
+      let permissionsGranted = false;
+      let permissionChecked = false; // Track if we've checked permissions
+
+      // Sync range and number inputs
+      stripeWidthInput.addEventListener("input", () => {
+        stripeWidthValue.value = stripeWidthInput.value;
+      });
+      stripeWidthValue.addEventListener("input", () => {
+        stripeWidthInput.value = stripeWidthValue.value;
+      });
+      speedInput.addEventListener("input", () => {
+        speedValue.value = speedInput.value;
+      });
+      speedValue.addEventListener("input", () => {
+        speedInput.value = speedValue.value;
+      });
+
+      // Check permissions button
+      checkPermissionsBtn.addEventListener("click", async () => {
+        await checkPermissions();
+      });
+      // Revoke permissions button
+      revokePermissionsBtn.addEventListener("click", () => {
+        revokePermissions();
+      });
+
+      /**
+       * Check and request camera/microphone permissions
+       */
+      async function checkPermissions() {
+        try {
+          // First try to get the current permission state without prompting
+          if (navigator.permissions && navigator.permissions.query) {
+            const videoPermission = await navigator.permissions.query({ name: 'camera' });
+            const audioPermission = await navigator.permissions.query({ name: 'microphone' });
+
+            if (videoPermission.state === 'granted' && audioPermission.state === 'granted') {
+              updatePermissionStatus(true, "Permissions already granted");
+              permissionsGranted = true;
+              permissionChecked = true;
+              return true;
+            }
+          }
+
+          // If not already granted, request permissions by getting media
+          mediaStream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: true
+          });
+
+          updatePermissionStatus(true, "Permissions granted");
+          permissionsGranted = true;
+          permissionChecked = true;
+          return true;
+        } catch (error) {
+          console.error("Permission error:", error);
+          updatePermissionStatus(false, "Permissions denied: " + error.message);
+          permissionsGranted = false;
+          permissionChecked = true;
+          return false;
+        }
+      }
+
+      function revokePermissions() {
+        // Stop all tracks
+        if (mediaStream) {
+          mediaStream.getTracks().forEach(track => track.stop());
+          mediaStream = null;
+        }
+
+        // Reset permission state
+        permissionsGranted = false;
+        permissionChecked = false;
+
+        // Update UI
+        updatePermissionStatus(false, "Permissions revoked");
+        permissionStatus.innerHTML = `<p>Webcam permissions: Not checked</p>`;
+        permissionStatus.className = "";
+
+        // Show check permissions button, hide revoke button
+        checkPermissionsBtn.style.display = "inline-block";
+        revokePermissionsBtn.style.display = "none";
+      }
+
+      function updatePermissionStatus(granted, message) {
+        permissionStatus.innerHTML = `<p>Webcam permissions: ${granted ? "Granted" : "Denied"}</p>`;
+        if (granted) {
+          permissionStatus.className = "permission-granted";
+          // Show revoke button, hide check button
+          checkPermissionsBtn.style.display = "none";
+          revokePermissionsBtn.style.display = "inline-block";
+        } else {
+          permissionStatus.className = "permission-denied";
+          permissionStatus.innerHTML += `<p><small>${message}</small></p>`;
+          // Show check button, hide revoke button
+          checkPermissionsBtn.style.display = "inline-block";
+          revokePermissionsBtn.style.display = "none";
+        }
+      }
+      /**
+       * Start the drum.
+       * @param {"left"|"right"|"up"|"down"} direction
+       */
+      async function startDrum(direction) {
+        // If we haven't checked permissions yet, check them now
+        // If we haven't checked permissions yet, don't proceed
+        if (!permissionChecked) {
+          alert("Please check permissions first using the 'Check Permissions' button in the menu.");
+          return;
+        }
+
+        currentDirection = direction;
+        menu.style.display = "none";
+
+        // Update CSS variables with current settings
+        document.documentElement.style.setProperty('--stripe-width', stripeWidthInput.value + 'px');
+        document.documentElement.style.setProperty('--speed', speedInput.value + 's');
+
+        const drum = document.createElement("div");
+        drum.className = "drum-view";
+
+        // Determine orientation & animation
+        let animName;
+        if (direction === "left" || direction === "right") {
+          drum.style.setProperty("--orientation", "90deg"); // vertical bars
+          animName = direction === "left" ? "scrollX" : "scrollXReverse";
+        } else {
+          drum.style.setProperty("--orientation", "0deg"); // horizontal bars
+          animName = direction === "down" ? "scrollY" : "scrollYReverse";
+        }
+        drum.style.animationName = animName;
+
+        // Return to menu handlers
+        drum.addEventListener("click", stopRecordingAndReturnToMenu);
+        window.addEventListener("keydown", (e) => e.key === "Escape" && stopRecordingAndReturnToMenu());
+
+        document.body.appendChild(drum);
+        //drum.requestFullscreen?.();
+
+        // Start webcam and recording if permissions were granted
+        if (permissionsGranted) {
+          try {
+            await startWebcamRecording();
+          } catch (error) {
+            console.error("Error starting webcam recording:", error);
+            // Continue even if recording fails
+          }
+        } else {
+          recordingIndicator.textContent = "RECORDING (NO PERMISSIONS)";
+          recordingIndicator.style.display = "block";
+          recordingIndicator.style.background = "orange";
+        }
+      }
+
+      /**
+       * Start webcam and recording
+       */
+      async function startWebcamRecording() {
+        console.log("starting recording")
+        // Get user media (video and audio)
+        // We know we have permissions at this point
+        // Use existing stream if available, otherwise get new one
+        if (!mediaStream || !mediaStream.active) {
+          mediaStream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: true
+          });
+        }
+
+        // Show preview (small window)
+        webcamPreview.srcObject = mediaStream;
+        webcamPreview.style.display = "block";
+
+        // Initialize MediaRecorder
+        const options = { mimeType: 'video/webm;codecs=vp9,opus' };
+        try {
+          mediaRecorder = new MediaRecorder(mediaStream, options);
+        } catch (e) {
+          console.warn("Failed to create MediaRecorder with preferred codec, trying default:", e);
+          mediaRecorder = new MediaRecorder(mediaStream);
+        }
+
+        // Collect data chunks
+        recordedChunks = [];
+        mediaRecorder.ondataavailable = (event) => {
+          console.log("event.data.size",event.data.size)
+          if (event.data.size > 0) {
+            recordedChunks.push(event.data);
+          }
+        };
+
+        // Save recording when stopped
+        mediaRecorder.onstop = saveRecording;
+
+        // Handle errors
+        mediaRecorder.onerror = (event) => {
+          console.error("MediaRecorder error:", event.error);
+          recordingIndicator.textContent = "RECORDING ERROR";
+          recordingIndicator.style.background = "darkred";
+        };
+
+        // Start recording
+        mediaRecorder.start(100); // Collect data every 100ms
+        recordingStartTime = new Date();
+
+        // Show recording indicator
+        recordingIndicator.style.display = "block";
+        recordingIndicator.style.background = "red";
+        recordingIndicator.textContent = "RECORDING";
+      }
+
+      /**
+      * Stop recording and return to menu
+      */
+      function stopRecordingAndReturnToMenu() {
+       if (mediaRecorder && mediaRecorder.state !== "inactive") {
+         try {
+           mediaRecorder.stop();
+           // Wait a moment for the recording to be processed before returning to menu
+           setTimeout(() => {
+             returnToMenu();
+           }, 500);
+         } catch (e) {
+           console.error("Error stopping recorder:", e);
+           returnToMenu();
+         }
+       } else {
+         returnToMenu();
+       }
+      }
+
+      function returnToMenu() {
+        revokePermissionsBtn.style.display = "inline-block";
+       // Hide preview and indicator
+       webcamPreview.style.display = "none";
+       recordingIndicator.style.display = "none";
+
+       // Clean up drum view
+       const drumView = document.querySelector('.drum-view');
+       if (drumView) {
+         drumView.remove();
+       }
+
+       // Exit fullscreen
+       if (document.fullscreenElement) {
+         document.exitFullscreen();
+       }
+
+       // Show menu
+       menu.style.display = "flex";
+      }
+
+      /**
+       * Save the recording to a file
+       */
+      function saveRecording() {
+        console.log("saveRecording called")
+        if (recordedChunks.length === 0) {
+          console.warn("No recorded data available");
+          return;
+        }
+
+        const blob = new Blob(recordedChunks, {
+          type: mediaRecorder.mimeType || 'video/webm'
+        });
+
+        // Generate filename with timestamp and direction
+        const timestamp = recordingStartTime.toISOString()
+          .replace(/[:.]/g, "-")
+          .replace("T", "_")
+          .slice(0, 19);
+        const filename = `drum_${currentDirection}_${stripeWidthInput.value}px_${speedInput.value}s_${timestamp}.webm`;
+
+        // Create download link
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.style.display = "none";
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+
+        // Clean up
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 100);
+      }
+
+      // Bind direction buttons
+      document.querySelectorAll("#menu button[data-direction]").forEach((btn) => {
+        btn.addEventListener("click", () => startDrum(btn.dataset.direction));
+      });
+    </script>
+  </body>
+</html>
